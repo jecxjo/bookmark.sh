@@ -837,7 +837,7 @@ EOF
 extPath="$(ExtPath)"
 userId="$(PathUserId "${extPath}")"
 case "${extPath}" in
-  "")
+  "" | "/")
     cgi_getvars BOTH cmd
     case "${cmd}" in
       "")

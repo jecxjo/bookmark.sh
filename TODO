@@ -2,9 +2,19 @@ TODO
 ----
 
 0004 Add css textbox-300 and textbox-600
+0008 Host portion of long url should be forced to lowercase
+0009 Add search option for tags
+0010 Users can delete entries
+0011 User can modify entries
+0012 User duplicates and anonymous should all create their own instances of shortid
+0013 User bookmarklet support
 
 Complete:
+0006 Path "/" should be treated like no path rather than expand
 0005 User account using cookies
 0003 Short URL for user
 0002 User login
 0001 Short URL for anonymous
+
+DNF:
+0007 Links should allow multiple users in field
