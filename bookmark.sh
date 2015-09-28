@@ -70,9 +70,11 @@ EXPIRATION=3600 # 1 hour
 ###############
 # LOGIN_DB - user;key;timeout
 LOGIN_DB="${DB_DIR}/login.db"
+touch "${LOGIN_DB}"
 
 # LINK_DB - shortid;url;date;user;comment;tags
 LINK_DB="${DB_DIR}/links.db"
+touch "${LINK_DB}"
 
 ##################
 # START bash_cgi #
@@ -232,7 +234,7 @@ function PathShortUserId () {
 }
 
 function PathUserId () {
-  echo "$1" | grep "^/user/[a-zA-Z0-9-]\+$" | sed "s|^/user/\([a-zA-Z0-9-]\+\)$|\1|"
+  echo "$1" | grep "^/u/[a-zA-Z0-9-]\+$" | sed "s|^/u/\([a-zA-Z0-9-]\+\)$|\1|"
 }
 
 #########
@@ -472,14 +474,67 @@ $(Http)
 <!DOCTYPE html>
 <html>
 <body>
+  <h1>${TITLE}</h1>
   User: ${user}<br />
   <br />
-  Links:<br />
+  <p>[ <a href="${URL}/u/${user}?cmd=logout">Logout</a> ]</p><br />
+  <center>
+    <form action="${URL}/u/${user}" method="POST">
+      <input type="hidden" name="cmd" value="useraddlink" />
+      <p>URL: <input type="text" name="longurl" class="textbox-600" /></p>
+      <p>NAME: <input type="text" name="name" class="textbox-600" /></p>
+      <p>TAG: <input type="text" name="tag" class="textbox-600" /></p>
+      <input type="submit" value="Save" />
+    </form>
+  </center>
   <br />
-  <p>[ <a href="${URL}/user/${user}?cmd=logout">Logout</a> ]</p>
+  <!-- Tags -->
+  <table>
+    $(UserLinks "${cookieUser}")
+  </table>
 </body>
 </html>
 EOF
+}
+
+# user, url, name, tag
+function UserAddLinkPage () {
+  local user="$(IsSaneUser $1)" longurl="$2" name="$3" tag="$4"
+  local token="$(CookieToken)"
+  local cookieUser=$(TokenUser "${token}")
+  local cookieKey=$(TokenKey "${token}")
+
+  if [[ -z "${user}" ]]; then
+    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ "${user}" != "${cookieUser}" ]]; then
+    GenerateErrorMain "User Cookie Issue" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
+    GenerateErrorMain "Cookie Error" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  local out=$(Shorten "${longurl}" "${user}" "${name}" "${tag}")
+
+  UserPage "${user}"
+}
+
+function UserLinks () {
+  local user="$(IsSaneUser "$1")"
+
+  awk -v user="${user}" -v url="${URL}" '
+    BEGIN { FS = ";" }
+    {
+      if ( $4 == user )
+      {
+        print "<tr><td bgcolor=CCCCCC>[+]</td><td bgcolor=CCCCCC>[-]</td><td bgcolor=CCCCCC>" url "/" $1 "</td><td bgcolor=CCCCCC>" $5 "</td></tr>";
+      }
+    }' "${LINK_DB}"
 }
 
 # Generate short url and load the main form again
@@ -581,11 +636,11 @@ $(Http "token=${user}:${key};")
 $(Header)
 <body>
   <script>
-    setTimeout( function () { window.location.href="${URL}/user/${user}"; }, 500);
+    setTimeout( function () { window.location.href="${URL}/u/${user}"; }, 500);
   </script>
   <center>
     Login Successful <br /><br />
-    If not automatically redirected click <a href="${URL}/user/${user}">this link</a>
+    If not automatically redirected click <a href="${URL}/u/${user}">this link</a>
   </center>
 <//body>
 </html>
@@ -805,11 +860,17 @@ case "${extPath}" in
         ;;
     esac
     ;;
-  "/user/${userId}")
+  "/u/${userId}")
     cgi_getvars BOTH cmd
     case "${cmd}" in
       "logout")
         LogoutPage
+        ;;
+      "useraddlink")
+        cgi_getvars POST longurl
+        cgi_getvars POST name
+        cgi_getvars POST tag
+        UserAddLinkPage "${userId}" "${longurl}" "${name}" "${tag}"
         ;;
       *)
         UserPage "${userId}"
