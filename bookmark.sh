@@ -309,7 +309,7 @@ function IsSaneUser () {
 # Checks url for protocol and inserts if not there
 # 1->url
 function FixURL () {
-  local url="$1"
+  local url=$(echo "$1" | sed 's|^\(.*\)://\([a-zA-Z0-9.-]\+\)\(/.*\)|\L\1://\2\E\3|' | sed 's|^\([a-zA-Z0-9.-]\+\)\(/*\)|\L\1\E\2|')
 
   # if exit 0 no match was found, assume http
   if out=$(echo "${url}" | awk '/http:\/\// || /https:\/\// || /ftp:\/\// { exit 1; }'); then
