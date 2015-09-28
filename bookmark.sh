@@ -327,13 +327,15 @@ function FixURL () {
 # Shorten URL and return id
 # 1->longurl, 2->user, 3->comments, 4->tags
 function Shorten () {
-  local longurl="$1" user="$2" comments="$3" tags="$4"
-  local shortid=$(awk -v longurl="${longurl}" '
+  local longurl="$(FixURL "$1")" user="$2" comments="$3" tags="$4"
+  local shortid=$(awk -v longurl="${longurl}" -v user="${user}" '
     BEGIN { FS = ";" }
     {
       if ( $2 == longurl ) {
-        print $1;
-        exit 0;
+        if ( $4 == user ) {
+          print $1;
+          exit 0;
+        }
       }
     }' "${LINK_DB}")
 
@@ -519,6 +521,7 @@ function UserAddLinkPage () {
     return
   fi
 
+
   local out=$(Shorten "${longurl}" "${user}" "${name}" "${tag}")
 
   UserPage "${user}"
@@ -540,8 +543,7 @@ function UserLinks () {
 # Generate short url and load the main form again
 # 1->longurl
 function GenerateShorten () {
-  local longurl="$(FixURL "$1")"
-  local shortid="$(Shorten "${longurl}")"
+  local shortid="$(Shorten "$1")"
 
   if [[ -z "${shortid}" ]]; then
     cat << EOF
@@ -607,8 +609,6 @@ $(Header)
   <br />
   <p>[ <a href="${URL}">Back</a> ]</p>
   <br />
-  <br />
-  Env: $(env)
 </body>
 </html>
 EOF
