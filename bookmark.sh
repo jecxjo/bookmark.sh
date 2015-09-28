@@ -357,6 +357,52 @@ function Shorten () {
   echo "${shortid}"
 }
 
+##########
+# Delete #
+##########
+# LINK_DB - shortid;longurl;date;user;comments;tags
+# Delete ID
+# 1->shortid, 2->user
+function Delete () {
+  local shortid="$1" user="$(IsSaneUser "$2")"
+
+  if [[ -z "${user}" ]]; then
+    echo "ERROR"
+    return
+  fi
+
+  if [[ "$(LockLinkMutex)" == "LOCKED" ]]; then
+    local t="$(mktemp /tmp/links.XXXXXX)"
+
+    awk -v shortid="${shortid}" -v user="${user}" '
+      BEGIN { FS = ";" }
+      {
+        if ( $1 != shortid )
+        {
+          print $0;
+        }
+        else
+        {
+          if ( $4 != user )
+          {
+            print $0;
+          }
+          else
+          {
+            print $1";;;;;";
+          }
+        }
+
+      }' "${LINK_DB}" > "${t}"
+
+    cp --no-preserve=mode,ownership "${t}" "${LINK_DB}"
+    rm "${t}"
+    UnlockLinkMutex
+  fi
+
+  echo "DONE"
+}
+
 #########
 # Pages #
 #########
@@ -529,6 +575,34 @@ function UserAddLinkPage () {
   UserPage "${user}"
 }
 
+# user, shortid
+function UserDeleteLinkPage () {
+  local user="$(IsSaneUser "$1")" shortid="$2"
+
+  local token="$(CookieToken)"
+  local cookieUser=$(TokenUser "${token}")
+  local cookieKey=$(TokenKey "${token}")
+
+  if [[ -z "${user}" ]]; then
+    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ "${user}" != "${cookieUser}" ]]; then
+    GenerateErrorMain "User Cookie Issue" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
+    GenerateErrorMain "Cookie Error" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  local out=$(Delete "${shortid}" "${user}")
+
+  UserPage "${user}"
+}
+
 function UserLinks () {
   local user="$(IsSaneUser "$1")"
 
@@ -537,7 +611,12 @@ function UserLinks () {
     {
       if ( $4 == user )
       {
-        print "<tr><td bgcolor=CCCCCC>[+]</td><td bgcolor=CCCCCC>[-]</td><td bgcolor=CCCCCC>" url "/" $1 "</td><td bgcolor=CCCCCC>" $5 "</td></tr>";
+        print "<tr>";
+        print " <td bgcolor=CCCCCC>[+]</td>";
+        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=deletelink&shortid=" $1 "\">-</a>]</td>";
+        print " <td bgcolor=CCCCCC>" url "/" $1 "</td>";
+        print " <td bgcolor=CCCCCC>" $5 "</td>";
+        print "</tr>";
       }
     }' "${LINK_DB}"
 }
@@ -873,6 +952,10 @@ case "${extPath}" in
         cgi_getvars POST name
         cgi_getvars POST tag
         UserAddLinkPage "${userId}" "${longurl}" "${name}" "${tag}"
+        ;;
+      "deletelink")
+        cgi_getvars BOTH shortid
+        UserDeleteLinkPage "${userId}" "${shortid}"
         ;;
       *)
         UserPage "${userId}"
