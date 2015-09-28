@@ -7,9 +7,9 @@ Pending:
 0010 Users can delete entries
 0011 User can modify entries
 0013 User bookmarklet support
-0014 Shortened page doesn't have link to login.
 
 Complete:
+0014 Shortened page doesn't have link to login.
 0012 User duplicates and anonymous should all create their own instances of shortid
 0008 Host portion of long url should be forced to lowercase
 0006 Path "/" should be treated like no path rather than expand

@@ -401,6 +401,8 @@ $(Http)
   <body>
     <h1>${TITLE}</h1>
     $(GenerateShorten "${longurl}")
+    <br />
+    $(GenerateLoginLink)
   </body>
 </html>
 EOF
