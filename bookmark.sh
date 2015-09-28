@@ -195,6 +195,30 @@ function Increment () {
   esac
 }
 
+function CookieToken () {
+  echo "${HTTP_COOKIE}" | awk '
+    BEGIN { RS = ";"; FS = "="; }
+    {
+      gsub(/^[ \t]+/, "", $1);
+      gsub(/[ \t]+$/, "", $1);
+      if ( $1 == "token" )
+      {
+        gsub(/^[ \t]+/, "", $2);
+        gsub(/[ \t]+$/, "", $2);
+        print $2;
+        exit 0;
+      }
+    }'
+}
+
+function TokenUser () {
+  echo "$1" | awk 'BEGIN { FS = ":" } { print $1 }'
+}
+
+function TokenKey () {
+  echo "$1" | awk 'BEGIN { FS = ":" } { print $2 }'
+}
+
 function ExtPath () {
   builtin echo "${REQUEST_URI}" | sed "s|${SCRIPT_NAME}||" | sed "s|\?.*$||"
 }
@@ -205,6 +229,10 @@ function PathShortId () {
 
 function PathShortUserId () {
   echo "$1" | grep "^/[a-zA-Z0-9-]\+/[a-zA-Z0-9-]\+$" | sed "s|^/\([a-zA-Z0-9-]\+\)/.*$|\1|"
+}
+
+function PathUserId () {
+  echo "$1" | grep "^/user/[a-zA-Z0-9-]\+$" | sed "s|^/user/\([a-zA-Z0-9-]\+\)$|\1|"
 }
 
 #########
@@ -269,7 +297,7 @@ function IsSaneUser () {
   fi
 
   # Check if user is actually on system
-  grep -q "^${user};" /etc/passwd
+  grep -q "^${user}:" /etc/passwd
 
   if [[ $? -eq 0 ]]; then
     echo "${user}" # Print user name since its valid
@@ -390,9 +418,69 @@ $(Header)
 EOF
 }
 
-#function GenerateLoginLink () {
-#
-#}
+function LoginPage () {
+  cat << EOF
+$(Http)
+
+<!DOCTYPE html>
+<html>
+  <h1>${TITLE} - Login</h1>
+  <form action="${URL}" method="POST">
+    <input type="hidden" name="cmd" value="trylogin" />
+    <p><label class="field" for="user">User:</label> <input type="text" name="user" class="textbox-300" /></p>
+    <p><label class="field" for="password">Password:</label> <input type="password" name="password" class="textbox-300" /></p>
+    <input type="submit" value="Login" />
+  </form>
+</html>
+EOF
+}
+
+function GenerateLoginLink () {
+  cat << EOF
+<br />
+<center>
+  <p>[ <a href="${URL}?cmd=login">Login</a> ]</p>
+</center>
+<br />
+EOF
+}
+
+function UserPage () {
+  local user="$(IsSaneUser $1)"
+  local token="$(CookieToken)"
+  local cookieUser=$(TokenUser "${token}")
+  local cookieKey=$(TokenKey "${token}")
+
+  if [[ -z "${user}" ]]; then
+    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ "${user}" != "${cookieUser}" ]]; then
+    GenerateErrorMain "User Cookie Issue" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
+    GenerateErrorMain "Cookie Error" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  cat << EOF
+$(Http)
+
+<!DOCTYPE html>
+<html>
+<body>
+  User: ${user}<br />
+  <br />
+  Links:<br />
+  <br />
+  <p>[ <a href="${URL}/user/${user}?cmd=logout">Logout</a> ]</p>
+</body>
+</html>
+EOF
+}
 
 # Generate short url and load the main form again
 # 1->longurl
@@ -451,6 +539,197 @@ EOF
   fi
 }
 
+function GenerateErrorMain () {
+  cat << EOF
+$(Http "$2")
+
+<!DOCTYPE html>
+<html>
+$(Header)
+<body>
+  <h1>${TITLE} - Error</h1>
+  $1<br />
+  <br />
+  <p>[ <a href="${URL}">Back</a> ]</p>
+  <br />
+  <br />
+  Env: $(env)
+</body>
+</html>
+EOF
+}
+
+function TryLogin () {
+  local user="$(IsSaneUser "$1")" pass="$2"
+
+  if [[ -z "${user}" ]]; then
+    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  local key=$(LoginUser "${user}" "${pass}")
+  if [[ -z "${key}" ]]; then
+    GenerateErrorMain "Invalid User/Password" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  cat << EOF
+$(Http "token=${user}:${key};")
+
+<!DOCTYPE html>
+<html>
+$(Header)
+<body>
+  <script>
+    setTimeout( function () { window.location.href="${URL}/user/${user}"; }, 500);
+  </script>
+  <center>
+    Login Successful <br /><br />
+    If not automatically redirected click <a href="${URL}/user/${user}">this link</a>
+  </center>
+<//body>
+</html>
+EOF
+}
+
+function LogoutPage () {
+  local token="$(CookieToken)"
+  local user=$(TokenUser "${token}")
+  local key=$(TokenKey "${token}")
+  local res="$(LogoutUser "${user}" "${key}")"
+
+  if [[ "${res}" != "LOGOUT" ]]; then
+    GenerateErrorMain "Invalid Cookie" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  cat << EOF
+$(Http "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT")
+
+<!DOCTYPE html>
+<html>
+$(Header)
+<body>
+  <script>
+    setTimeout( function () { window.location.href="${URL}"; }, 500);
+  </script>
+  <center>
+    Logout Successful <br /><br />
+    If not automatically redirected click <a href="${URL}">this link</a>
+  </center>
+<//body>
+</html>
+EOF
+
+}
+
+###############
+# Login Stuff #
+###############
+# Login as user, returns key if success and empty string
+# if failure
+# 1->user, 2->pass
+function LoginUser () {
+  local user="$(IsSaneUser "$1")" pass="$2"
+
+  # Check if user and password work
+  if out=$(builtin echo -e "${pass}\n" | su -c "true" - "${user}" 2>&1 1>/dev/null); then
+    local key=$(GenerateKey)
+
+    if [[ "$(LockLoginMutex)" == "LOCKED" ]]; then
+      local now=$(date +%s)
+      local timeout=$(( ${now} + ${EXPIRATION} ))
+      local t=$(mktemp /tmp/login.XXXXXX)
+
+      # Remove all previous login entries for user
+      awk -v user="${user}" '
+        BEGIN { FS = ";" }
+        {
+          if ( $1 != user ) {
+            print $0;
+          }
+        }' "${LOGIN_DB}" > "${t}"
+
+      # move new file to DB location
+      cp --no-preserve=mode,ownership "${t}" "${LOGIN_DB}"
+      rm "${t}"
+
+      # Add new key
+      builtin echo "${user};${key};${timeout}" >> "${LOGIN_DB}"
+
+      # Unlock mutex
+      UnlockLoginMutex
+
+      # Return key to caller
+      echo "${key}"
+    fi
+  fi
+}
+
+# Validates if user/key pair match
+# 1->user, 2->key
+function ValidateUserKey () {
+  local user="$(IsSaneUser "$1")" key="$2"
+
+  awk -v uk="^${user};${key};" '{ if ( $0 ~ uk ) { print $0; exit 0; } }' "${LOGIN_DB}"
+}
+
+# Log out user
+# 1->user, 2->key
+function LogoutUser () {
+  local user="$(IsSaneUser "$1")" key="$2"
+
+  if [[ ! -z "$(ValidateUserKey "${user}" "${key}")" ]]; then
+    if [[ "$(LockLoginMutex)" == "LOCKED" ]]; then
+      local t=$(mktemp /tmp/log.XXXXXX)
+
+      # Remove all previous logins
+      awk -v user="${user}" '
+        BEING { FS = ";" }
+        {
+          if ( $1 != user ) {
+            print $0;
+          }
+        }' "${LOGIN_DB}" > "${t}"
+
+      # move new file to DB location
+      cp --no-preserve=mode,ownership "${t}" "${LOGIN_DB}"
+      rm "${t}"
+
+      # Unlock mutex
+      UnlockLoginMutex
+
+      # Return value
+      echo "LOGOUT"
+    else
+      echo "BUSY"
+    fi
+  else
+    echo "INVALID"
+  fi
+}
+
+# Clean out all old logins
+function CleanupLogin () {
+  if [[ "$(LockLoginMutex)" == "LOCKED" ]]; then
+    local t="$(mktemp /tmp/login.XXXXXX)"
+    awk -v now="$(date +%s)" '
+      BEGIN { FS = ";" }
+      {
+        if ( $3 > now ) {
+          print $0;
+        }
+      }' "${LOGIN_DB}" > "${t}"
+
+    # move new file to DB location
+    cp --no-preserve=mode,ownership "${t}" "${LOGIN_DB}"
+    rm "${t}"
+
+    UnlockLoginMutex
+  else
+    echo "BUSY"
+  fi
+}
 
 ###################
 # HTML Generation #
@@ -501,9 +780,10 @@ EOF
 ########
 
 extPath="$(ExtPath)"
+userId="$(PathUserId "${extPath}")"
 case "${extPath}" in
   "")
-    cgi_getvars POST cmd
+    cgi_getvars BOTH cmd
     case "${cmd}" in
       "")
         MainPage
@@ -512,13 +792,29 @@ case "${extPath}" in
         cgi_getvars POST longurl
         ShortenPage "${longurl}"
         ;;
+      "login")
+        LoginPage
+        ;;
+      "trylogin")
+        cgi_getvars POST user
+        cgi_getvars POST password
+        TryLogin "${user}" "${password}"
+        ;;
       *)
         MainPage
         ;;
     esac
     ;;
-  "/user")
-    # Handle user stuff
+  "/user/${userId}")
+    cgi_getvars BOTH cmd
+    case "${cmd}" in
+      "logout")
+        LogoutPage
+        ;;
+      *)
+        UserPage "${userId}"
+        ;;
+    esac
     ;;
   *)
     ExpandPage "${extPath}"

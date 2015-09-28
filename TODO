@@ -1,10 +1,10 @@
 TODO
 ----
 
-0002 User login
 0003 Short URL for user
 0004 Add css textbox-300 and textbox-600
-0005 User account using cookies
 
 Complete:
+0005 User account using cookies
+0002 User login
 0001 Short URL for anonymous
