@@ -65,6 +65,9 @@ BLACKLIST=(root http nobody)
 # Login expiration (in seconds)
 EXPIRATION=3600 # 1 hour
 
+# Expand delay (in seconds)
+DELAY=3
+
 ###############
 # Global Vars #
 ###############
@@ -658,6 +661,7 @@ EOF
 # Expand id to long url
 # 1->shortid
 function ExpandShort () {
+  local jsdelay=$(( ${DELAY} * 1000 ))
   local shortid="$(PathShortId "$1")"
   local longurl="$(awk -v shortid="${shortid}" '
     BEGIN { FS = "|" }
@@ -677,7 +681,7 @@ EOF
   else
     cat << EOF
 <script>
-  setTimeout( function () { window.location.href="${longurl}"; }, 5000);
+  setTimeout( function () { window.location.href="${longurl}"; }, ${jsdelay});
 </script>
 <center>
   Loading your url...<br />
