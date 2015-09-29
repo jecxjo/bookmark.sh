@@ -76,6 +76,9 @@ touch "${LOGIN_DB}"
 LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
+# Version, releases are X.Y, dev are X.Y.Z
+VERSION=0.0.1
+
 ##################
 # START bash_cgi #
 ##################
@@ -433,7 +436,7 @@ $(Http)
 <html>
 $(Header)
 <body>
-  <h1>${TITLE}</h1>
+$(Title)
 $(GenerateMainShortenForm)
 <br />
 $(GenerateLoginLink)
@@ -452,7 +455,7 @@ $(Http)
 <html>
   $(Header)
   <body>
-    <h1>${TITLE}</h1>
+    $(Title)
     $(GenerateShorten "${longurl}")
     <br />
     $(GenerateLoginLink)
@@ -470,7 +473,7 @@ $(Http)
 <html>
 $(Header)
 <body>
-  <h1>${TITLE} - Expanding</h1>
+  $(Title "Expanding")
   $(ExpandShort "${extPath}")
 </body>
 </html>
@@ -483,7 +486,7 @@ $(Http)
 
 <!DOCTYPE html>
 <html>
-  <h1>${TITLE} - Login</h1>
+  $(Title "Login")
   <form action="${URL}" method="POST">
     <input type="hidden" name="cmd" value="trylogin" />
     <p><label class="field" for="user">User:</label> <input type="text" name="user" class="textbox-300" /></p>
@@ -530,8 +533,9 @@ $(Http)
 
 <!DOCTYPE html>
 <html>
+$(Header)
 <body>
-  <h1>${TITLE}</h1>
+  $(Title)
   User: ${user}<br />
   <br />
   <p>[ <a href="${URL}/u/${user}?cmd=logout">Logout</a> ]</p><br />
@@ -692,7 +696,7 @@ $(Http "$2")
 <html>
 $(Header)
 <body>
-  <h1>${TITLE} - Error</h1>
+  $(Title "Error")
   $1<br />
   <br />
   <p>[ <a href="${URL}">Back</a> ]</p>
@@ -909,11 +913,30 @@ function Header() {
       float: left;
     }
     fieldset p {
-      clear: bloth;
+      clear: both;
       padding: 5px;
+    }
+    input.textbox-600 {
+      width: 600px;
+    }
+    input.textbox-300 {
+      width: 300px;
     }
   </style>
 </head>
+EOF
+}
+
+function Title () {
+  local sub="$1"
+
+  if [[ ! -z "${sub}" ]]; then
+    sub=" - ${sub}"
+  fi
+
+  cat << EOF
+  <h1>${TITLE}${sub}</h1>
+  <small>Version: ${VERSION}</small><br />
 EOF
 }
 

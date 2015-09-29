@@ -2,12 +2,13 @@ TODO
 ----
 
 Pending:
-0004 Add css textbox-300 and textbox-600
 0009 Add search option for tags
 0011 User can modify entries
 0013 User bookmarklet support
 
 Complete:
+0017 Add version on page
+0004 Add css textbox-300 and textbox-600
 0016 Delimiter in DB change to BAR
 0015 Remove semi-colons from all fields that related to db
 0010 Users can delete entries
