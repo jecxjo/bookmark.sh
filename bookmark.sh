@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.0.2
+VERSION=0.0.3
 
 ##################
 # START bash_cgi #
@@ -504,7 +504,8 @@ function GenerateLoginLink () {
   cat << EOF
 <br />
 <center>
-  <p>[ <a href="${URL}?cmd=login">Login</a> ]</p>
+<p>[ <a href="${URL}?cmd=login">Login</a> |
+     <a href="javascript:location.href='${URL}/?cmd=shorten&longurl='+encodeURIComponent(location.href)">${TITLE} - shorten</a> ]</p>
 </center>
 <br />
 EOF
