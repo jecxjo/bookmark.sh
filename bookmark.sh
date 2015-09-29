@@ -68,11 +68,11 @@ EXPIRATION=3600 # 1 hour
 ###############
 # Global Vars #
 ###############
-# LOGIN_DB - user;key;timeout
+# LOGIN_DB - user|key|timeout
 LOGIN_DB="${DB_DIR}/login.db"
 touch "${LOGIN_DB}"
 
-# LINK_DB - shortid;url;date;user;comment;tags
+# LINK_DB - shortid|url|date|user|comment|tags
 LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
@@ -319,17 +319,24 @@ function FixURL () {
   fi
 }
 
+# Removes all characters that could cause a problem
+# 1->string
+function StripBadStuff () {
+  builtin echo "$1" | tr -d '|'
+}
+
+
 
 ###########
 # Shorten #
 ###########
-# LINK_DB - shortid;longurl;date;user;comments;tags
+# LINK_DB - shortid|longurl|date|user|comments|tags
 # Shorten URL and return id
 # 1->longurl, 2->user, 3->comments, 4->tags
 function Shorten () {
-  local longurl="$(FixURL "$1")" user="$2" comments="$3" tags="$4"
+  local longurl="$(FixURL "$(StripBadStuff "$1")")" user="$(StripBadStuff "$2")" comments="$(StripBadStuff "$3")" tags="$(StripBadStuff "$4")"
   local shortid=$(awk -v longurl="${longurl}" -v user="${user}" '
-    BEGIN { FS = ";" }
+    BEGIN { FS = "|" }
     {
       if ( $2 == longurl ) {
         if ( $4 == user ) {
@@ -343,11 +350,11 @@ function Shorten () {
   if [[ -z "${shortid}" ]]; then
     if [[ "$(LockLinkMutex)" == "LOCKED" ]]; then
       # Find last used and then get the next
-      local last=$(awk 'BEGIN { FS = ";" } { print $1 }' "${LINK_DB}" | sort -r | head -n1)
+      local last=$(awk 'BEGIN { FS = "|" } { print $1 }' "${LINK_DB}" | sort -r | head -n1)
       local shortid=$(Increment "${last}")
 
       # Insert to db
-      echo "${shortid};${longurl};$(date +%Y%m%d);${user};${comments};${tags}" >> "${LINK_DB}"
+      echo "${shortid}|${longurl}|$(date +%Y%m%d)|${user}|${comments}|${tags}" >> "${LINK_DB}"
 
       UnlockLinkMutex
     fi
@@ -360,7 +367,7 @@ function Shorten () {
 ##########
 # Delete #
 ##########
-# LINK_DB - shortid;longurl;date;user;comments;tags
+# LINK_DB - shortid|longurl|date|user|comments|tags
 # Delete ID
 # 1->shortid, 2->user
 function Delete () {
@@ -375,7 +382,7 @@ function Delete () {
     local t="$(mktemp /tmp/links.XXXXXX)"
 
     awk -v shortid="${shortid}" -v user="${user}" '
-      BEGIN { FS = ";" }
+      BEGIN { FS = "|" }
       {
         if ( $1 != shortid )
         {
@@ -389,7 +396,7 @@ function Delete () {
           }
           else
           {
-            print $1";;;;;";
+            print $1"|||||";
           }
         }
 
@@ -607,7 +614,7 @@ function UserLinks () {
   local user="$(IsSaneUser "$1")"
 
   awk -v user="${user}" -v url="${URL}" '
-    BEGIN { FS = ";" }
+    BEGIN { FS = "|" }
     {
       if ( $4 == user )
       {
@@ -649,7 +656,7 @@ EOF
 function ExpandShort () {
   local shortid="$(PathShortId "$1")"
   local longurl="$(awk -v shortid="${shortid}" '
-    BEGIN { FS = ";" }
+    BEGIN { FS = "|" }
     {
       if ( $1 == shortid ) {
         print $2;
@@ -779,7 +786,7 @@ function LoginUser () {
 
       # Remove all previous login entries for user
       awk -v user="${user}" '
-        BEGIN { FS = ";" }
+        BEGIN { FS = "|" }
         {
           if ( $1 != user ) {
             print $0;
@@ -791,7 +798,7 @@ function LoginUser () {
       rm "${t}"
 
       # Add new key
-      builtin echo "${user};${key};${timeout}" >> "${LOGIN_DB}"
+      builtin echo "${user}|${key}|${timeout}" >> "${LOGIN_DB}"
 
       # Unlock mutex
       UnlockLoginMutex
@@ -807,7 +814,7 @@ function LoginUser () {
 function ValidateUserKey () {
   local user="$(IsSaneUser "$1")" key="$2"
 
-  awk -v uk="^${user};${key};" '{ if ( $0 ~ uk ) { print $0; exit 0; } }' "${LOGIN_DB}"
+  awk -v uk="^${user}|${key}|" '{ if ( $0 ~ uk ) { print $0; exit 0; } }' "${LOGIN_DB}"
 }
 
 # Log out user
@@ -821,7 +828,7 @@ function LogoutUser () {
 
       # Remove all previous logins
       awk -v user="${user}" '
-        BEING { FS = ";" }
+        BEING { FS = "|" }
         {
           if ( $1 != user ) {
             print $0;
@@ -850,7 +857,7 @@ function CleanupLogin () {
   if [[ "$(LockLoginMutex)" == "LOCKED" ]]; then
     local t="$(mktemp /tmp/login.XXXXXX)"
     awk -v now="$(date +%s)" '
-      BEGIN { FS = ";" }
+      BEGIN { FS = "|" }
       {
         if ( $3 > now ) {
           print $0;

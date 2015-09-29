@@ -8,6 +8,8 @@ Pending:
 0013 User bookmarklet support
 
 Complete:
+0016 Delimiter in DB change to BAR
+0015 Remove semi-colons from all fields that related to db
 0010 Users can delete entries
 0014 Shortened page doesn't have link to login.
 0012 User duplicates and anonymous should all create their own instances of shortid
