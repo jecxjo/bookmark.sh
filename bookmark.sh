@@ -77,7 +77,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.0.1
+VERSION=0.0.2
 
 ##################
 # START bash_cgi #
@@ -818,7 +818,14 @@ function LoginUser () {
 function ValidateUserKey () {
   local user="$(IsSaneUser "$1")" key="$2"
 
-  awk -v uk="^${user}|${key}|" '{ if ( $0 ~ uk ) { print $0; exit 0; } }' "${LOGIN_DB}"
+  awk -v user="${user}" -v key="${key}" '
+    BEGIN { FS = "|" }
+    {
+      if ( $1 == user && $2 == key) {
+        print $0;
+        exit 0;
+      }
+    }' "${LOGIN_DB}"
 }
 
 # Log out user
@@ -828,17 +835,10 @@ function LogoutUser () {
 
   if [[ ! -z "$(ValidateUserKey "${user}" "${key}")" ]]; then
     if [[ "$(LockLoginMutex)" == "LOCKED" ]]; then
-      local t=$(mktemp /tmp/log.XXXXXX)
+      local t=$(mktemp /tmp/logout.XXXXXX)
 
       # Remove all previous logins
-      awk -v user="${user}" '
-        BEING { FS = "|" }
-        {
-          if ( $1 != user ) {
-            print $0;
-          }
-        }' "${LOGIN_DB}" > "${t}"
-
+      awk -v user="${user}" 'BEGIN{FS="|"}{if ( $1 != user ) { print $0; } }' "${LOGIN_DB}" > "${t}"
       # move new file to DB location
       cp --no-preserve=mode,ownership "${t}" "${LOGIN_DB}"
       rm "${t}"
