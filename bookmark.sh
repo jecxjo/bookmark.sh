@@ -514,17 +514,17 @@ function UserPage () {
   local cookieKey=$(TokenKey "${token}")
 
   if [[ -z "${user}" ]]; then
-    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    ErrorRedirect "/?cmd=login" "Not logged in"
     return
   fi
 
   if [[ "${user}" != "${cookieUser}" ]]; then
-    GenerateErrorMain "User Cookie Issue" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    ErrorRedirect "/?cmd=login" "Not logged in"
     return
   fi
 
   if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
-    GenerateErrorMain "Cookie Error" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    ErrorRedirect "/?cmd=login" "Not logged in"
     return
   fi
 
@@ -701,6 +701,27 @@ $(Header)
   <br />
   <p>[ <a href="${URL}">Back</a> ]</p>
   <br />
+</body>
+</html>
+EOF
+}
+
+# 1-> path, 2->message
+function ErrorRedirect () {
+  local path="$1" msg="$2"
+  cat << EOF
+$(Http)
+
+<!DOCTYPE html>
+<html>
+$(Header)
+<body>
+  $(Title "Error")
+  ${msg}<br />
+  <p> [ <a href="${URL}${path}">OK</a> ]</p>
+  <script>
+    setTimeout( function () { window.location.href="${URL}${path}"; }, 0);
+  </script>
 </body>
 </html>
 EOF
@@ -955,7 +976,7 @@ case "${extPath}" in
         MainPage
         ;;
       "shorten")
-        cgi_getvars POST longurl
+        cgi_getvars BOTH longurl
         ShortenPage "${longurl}"
         ;;
       "login")

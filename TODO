@@ -8,6 +8,7 @@ Pending:
 0018 Test for SSL when login
 
 Complete:
+0020 Load user page when logged out sends to login
 0019 Cookie validation always true
 0017 Add version on page
 0004 Add css textbox-300 and textbox-600
