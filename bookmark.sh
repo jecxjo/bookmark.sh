@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.0.3
+VERSION=0.0.4
 
 ##################
 # START bash_cgi #
@@ -511,6 +511,17 @@ function GenerateLoginLink () {
 EOF
 }
 
+# 1-> user
+function UserBookmarklet () {
+  local user="$(IsSaneUser $1)"
+
+  if [[ ! -z "${user}" ]]; then
+    cat << EOF
+    <a href="javascript:(function()%7Bvar%20s%3Ddocument.title%3Bvar%20l%3Dlocation.href%3Bvar%20w%3Dwindow.open(''%2C'${TITLE}'%2C'height%3D200%2Cwidth%3D450')%3Bvar%20d%3Dw.document%3Bd.write('%3Cform%20action%3D%22${URL}%2Fu%2F${user}%22%20method%3D%22POST%22%3E')%3Bd.write('%3Cinput%20type%3D%22hidden%22%20name%3D%22cmd%22%20value%3D%22useraddlink%22%20%2F%3E')%3Bd.write('URL%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22longurl%22%20size%3D%22400%22%20value%3D'%2Bl%2B'%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('NAME%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22name%22%20size%3D%22400%22%20value%3D%22'%2Bs%2B'%22%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('TAG%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22tag%22%20size%3D%22400%22%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('%3Cinput%20type%3D%22submit%22%20id%3D%22submit%22%20value%3D%22Submit%22%3E%3C%2Fform%3E')%3Bd.close()%7D)()">${TITLE} - ${user}</a>
+EOF
+  fi
+}
+
 function UserPage () {
   local user="$(IsSaneUser $1)"
   local token="$(CookieToken)"
@@ -542,7 +553,7 @@ $(Header)
   $(Title)
   User: ${user}<br />
   <br />
-  <p>[ <a href="${URL}/u/${user}?cmd=logout">Logout</a> ]</p><br />
+  <p>[ <a href="${URL}/u/${user}?cmd=logout">Logout</a> | $(UserBookmarklet "${user}") ]</p><br />
   <center>
     <form action="${URL}/u/${user}" method="POST">
       <input type="hidden" name="cmd" value="useraddlink" />
@@ -570,17 +581,17 @@ function UserAddLinkPage () {
   local cookieKey=$(TokenKey "${token}")
 
   if [[ -z "${user}" ]]; then
-    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    ErrorRedirect "/?cmd=login" "Not logged in"
     return
   fi
 
   if [[ "${user}" != "${cookieUser}" ]]; then
-    GenerateErrorMain "User Cookie Issue" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    ErrorRedirect "/?cmd=login" "Not logged in"
     return
   fi
 
   if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
-    GenerateErrorMain "Cookie Error" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    ErrorRedirect "/?cmd=login" "Not logged in"
     return
   fi
 
