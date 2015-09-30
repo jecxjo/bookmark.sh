@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.0.4
+VERSION=0.0.5
 
 ##################
 # START bash_cgi #
@@ -370,6 +370,32 @@ function Shorten () {
   echo "${shortid}"
 }
 
+function Update () {
+  local shortid="$1" longurl="$(FixURL "$(StripBadStuff "$2")")" user="$(StripBadStuff "$3")" comments="$(StripBadStuff "$4")" tags="$(StripBadStuff "$5")"
+
+  # check if link is already short
+  if [[ "$(LockLinkMutex)" == "LOCKED" ]]; then
+    local t="$(mktemp /tmp/link.XXXXXX)"
+    # Find last used and then get the next
+    awk -v shortid="${shortid}" '
+      BEGIN { FS = "|" }
+      {
+        if ( $1 != shortid )
+        {
+          print $0;
+        }
+      }' "${LINK_DB}" > "${t}"
+
+    # Insert to db
+    echo "${shortid}|${longurl}|$(date +%Y%m%d)|${user}|${comments}|${tags}" >> "${t}"
+
+    cp --no-preserve=mode,ownership "${t}" "${LINK_DB}"
+    rm "${t}"
+
+    UnlockLinkMutex
+  fi
+}
+
 ##########
 # Delete #
 ##########
@@ -414,6 +440,46 @@ function Delete () {
   fi
 
   echo "DONE"
+}
+
+###########
+# ShortTo #
+###########
+
+function ShortToURL () {
+  awk -v short="$1" '
+    BEGIN { FS = "|" }
+    {
+      if ( $1 == short )
+      {
+        print $2;
+        exit 0;
+      }
+    }' "${LINK_DB}"
+}
+
+function ShortToName () {
+  awk -v short="$1" '
+    BEGIN { FS = "|" }
+    {
+      if ( $1 == short )
+      {
+        print $5;
+        exit 0;
+      }
+    }' "${LINK_DB}"
+}
+
+function ShortToTag () {
+  awk -v short="$1" '
+    BEGIN { FS = "|" }
+    {
+      if ( $1 == short )
+      {
+        print $6;
+        exit 0;
+      }
+    }' "${LINK_DB}"
 }
 
 #########
@@ -523,10 +589,14 @@ EOF
 }
 
 function UserPage () {
-  local user="$(IsSaneUser $1)"
+  local user="$(IsSaneUser $1)" shortid="$2"
   local token="$(CookieToken)"
   local cookieUser=$(TokenUser "${token}")
   local cookieKey=$(TokenKey "${token}")
+  local cmd="useraddlink"
+  local url=""
+  local name=""
+  local tag=""
 
   if [[ -z "${user}" ]]; then
     ErrorRedirect "/?cmd=login" "Not logged in"
@@ -543,6 +613,13 @@ function UserPage () {
     return
   fi
 
+  if [[ ! -z "${shortid}" ]]; then
+    cmd="userupdatelink"
+    url="$(ShortToURL ${shortid})"
+    name="$(ShortToName ${shortid})"
+    tag="$(ShortToTag ${shortid})"
+  fi
+
   cat << EOF
 $(Http)
 
@@ -553,13 +630,15 @@ $(Header)
   $(Title)
   User: ${user}<br />
   <br />
+  shortid: ${shortid}<br />
   <p>[ <a href="${URL}/u/${user}?cmd=logout">Logout</a> | $(UserBookmarklet "${user}") ]</p><br />
   <center>
     <form action="${URL}/u/${user}" method="POST">
-      <input type="hidden" name="cmd" value="useraddlink" />
-      <p>URL: <input type="text" name="longurl" class="textbox-600" /></p>
-      <p>NAME: <input type="text" name="name" class="textbox-600" /></p>
-      <p>TAG: <input type="text" name="tag" class="textbox-600" /></p>
+      <input type="hidden" name="cmd" value="${cmd}" />
+      <input type="hidden" name="shortid" value="${shortid}" />
+      <p>URL: <input type="text" name="longurl" class="textbox-600" value="${url}" /></p>
+      <p>NAME: <input type="text" name="name" class="textbox-600" value="${name}" /></p>
+      <p>TAG: <input type="text" name="tag" class="textbox-600" value="${tag}" /></p>
       <input type="submit" value="Save" />
     </form>
   </center>
@@ -595,8 +674,33 @@ function UserAddLinkPage () {
     return
   fi
 
-
   local out=$(Shorten "${longurl}" "${user}" "${name}" "${tag}")
+
+  UserPage "${user}"
+}
+
+function UserUpdateLinkPage () {
+  local user="$(IsSaneUser "$1")" shortid="$2" longurl="$3" name="$4" tag="$5"
+  local token="$(CookieToken)"
+  local cookieUser=$(TokenUser "${token}")
+  local cookieKey=$(TokenKey "${token}")
+
+  if [[ -z "${user}" ]]; then
+    ErrorRedirect "/?cmd=login" "Not logged in"
+    return
+  fi
+
+  if [[ "${user}" != "${cookieUser}" ]]; then
+    ErrorRedirect "/?cmd=login" "Not logged in"
+    return
+  fi
+
+  if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
+    ErrorRedirect "/?cmd=login" "Not logged in"
+    return
+  fi
+
+  local out=$(Update "${shortid}" "${longurl}" "${user}" "${name}" "${tag}")
 
   UserPage "${user}"
 }
@@ -638,13 +742,13 @@ function UserLinks () {
       if ( $4 == user )
       {
         print "<tr>";
-        print " <td bgcolor=CCCCCC>[+]</td>";
+        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=updatelink&shortid=" $1 "\">+</a>]</td>";
         print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=deletelink&shortid=" $1 "\">-</a>]</td>";
         print " <td bgcolor=CCCCCC>" url "/" $1 "</td>";
         print " <td bgcolor=CCCCCC>" $5 "</td>";
         print "</tr>";
       }
-    }' "${LINK_DB}"
+    }' < <(sort -r "${LINK_DB}")
 }
 
 # Generate short url and load the main form again
@@ -1019,6 +1123,17 @@ case "${extPath}" in
         cgi_getvars POST name
         cgi_getvars POST tag
         UserAddLinkPage "${userId}" "${longurl}" "${name}" "${tag}"
+        ;;
+      "userupdatelink")
+        cgi_getvars POST longurl
+        cgi_getvars POST name
+        cgi_getvars POST tag
+        cgi_getvars POST shortid
+        UserUpdateLinkPage "${userId}" "${shortid}" "${longurl}" "${name}" "${tag}"
+        ;;
+      "updatelink")
+        cgi_getvars BOTH shortid
+        UserPage "${userId}" "${shortid}"
         ;;
       "deletelink")
         cgi_getvars BOTH shortid

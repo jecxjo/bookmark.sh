@@ -3,10 +3,10 @@ TODO
 
 Pending:
 0009 Add search option for tags
-0011 User can modify entries
 0018 Test for SSL when login
 
 Complete:
+0011 User can modify entries
 0013 User bookmarklet support
 0022 Anonymous link bookmarklet
 0021 Variable length delay on expand
