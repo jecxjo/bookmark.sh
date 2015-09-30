@@ -39,7 +39,7 @@
 #        AUTHOR: Jeff Parent (jeff@commentedcode.org
 #  ORGANIZATION: 
 #       CREATED: 09/25/2015 11:39
-#      REVISION: ---
+#      REVISION: 0.1
 #
 # ACKNOWLEDGEMENTS:
 # bash_cgi
@@ -57,7 +57,7 @@ TITLE="Bookmark.sh"
 
 # Faull URL path. This is used in the HTML generation, all forms will
 # point to this path
-URL="https://commentedcode.org/cgi-bin/bookmark.sh"
+URL="https://example.com/cgi-bin/bookmark.sh"
 
 # List of users that are not allowed to use this service
 BLACKLIST=(root http nobody)
@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.0.5
+VERSION=0.1
 
 ##################
 # START bash_cgi #
