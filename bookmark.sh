@@ -39,7 +39,7 @@
 #        AUTHOR: Jeff Parent (jeff@commentedcode.org
 #  ORGANIZATION: 
 #       CREATED: 09/25/2015 11:39
-#      REVISION: 0.1
+#      REVISION: 0.2
 #
 # ACKNOWLEDGEMENTS:
 # bash_cgi
@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.1.1
+VERSION=0.2
 
 ##################
 # START bash_cgi #
