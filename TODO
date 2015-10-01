@@ -4,8 +4,14 @@ TODO
 Pending:
 0009 Add search option for tags
 0018 Test for SSL when login
+0025 Reduce validations to entry cases in main loop
+0026 Cleanup up code, better documentation
 
 Complete:
+0027 Sort order is broken, print in reverse order found in db
+0028 Shorten broken, can't find next base36 correctly
+0023 Logging in from a different location logs out others
+0024 Short ID displayed on user page
 0011 User can modify entries
 0013 User bookmarklet support
 0022 Anonymous link bookmarklet

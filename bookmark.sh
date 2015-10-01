@@ -39,7 +39,7 @@
 #        AUTHOR: Jeff Parent (jeff@commentedcode.org
 #  ORGANIZATION: 
 #       CREATED: 09/25/2015 11:39
-#      REVISION: 0.1
+#      REVISION: 0.2
 #
 # ACKNOWLEDGEMENTS:
 # bash_cgi
@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.1
+VERSION=0.2
 
 ##################
 # START bash_cgi #
@@ -186,6 +186,13 @@ function GenerateKey () {
   dd if=/dev/random bs=1 count=32 2>/dev/null |
   base64 |
   tr -d '+/= '
+}
+
+# Pads a string with 0's and make it 10 characters long
+function Pad () {
+  local str="$1";
+  local pad="0000000000";
+  printf "%*.*s%s\n" 0 $((${#pad} - ${#str})) "${pad}" "${str}";
 }
 
 # Increment a 62-bit Alphanumeric "number"
@@ -356,7 +363,12 @@ function Shorten () {
   if [[ -z "${shortid}" ]]; then
     if [[ "$(LockLinkMutex)" == "LOCKED" ]]; then
       # Find last used and then get the next
-      local last=$(awk 'BEGIN { FS = "|" } { print $1 }' "${LINK_DB}" | sort -r | head -n1)
+      local last=$(awk 'BEGIN { FS = "|" } { print $1 }' "${LINK_DB}" |
+        while read x
+        do
+          Pad "${x}"
+        done |
+        sort -r | head -n1 | sed 's/^0\+//')
       local shortid=$(Increment "${last}")
 
       # Insert to db
@@ -630,7 +642,6 @@ $(Header)
   $(Title)
   User: ${user}<br />
   <br />
-  shortid: ${shortid}<br />
   <p>[ <a href="${URL}/u/${user}?cmd=logout">Logout</a> | $(UserBookmarklet "${user}") ]</p><br />
   <center>
     <form action="${URL}/u/${user}" method="POST">
@@ -748,7 +759,7 @@ function UserLinks () {
         print " <td bgcolor=CCCCCC>" $5 "</td>";
         print "</tr>";
       }
-    }' < <(sort -r "${LINK_DB}")
+    }' < <(sed '1!G;h;$!d' "${LINK_DB}")
 }
 
 # Generate short url and load the main form again
@@ -930,10 +941,15 @@ function LoginUser () {
       local t=$(mktemp /tmp/login.XXXXXX)
 
       # Remove all previous login entries for user
-      awk -v user="${user}" '
+      awk -v user="${user}" -v now="${now}" '
         BEGIN { FS = "|" }
         {
           if ( $1 != user ) {
+            # Not logging in user, keep
+            print $0;
+          }
+          else if ( $3 > now) {
+            # logging in user but hasnt expired, keep
             print $0;
           }
         }' "${LOGIN_DB}" > "${t}"
@@ -979,7 +995,13 @@ function LogoutUser () {
       local t=$(mktemp /tmp/logout.XXXXXX)
 
       # Remove all previous logins
-      awk -v user="${user}" 'BEGIN{FS="|"}{if ( $1 != user ) { print $0; } }' "${LOGIN_DB}" > "${t}"
+      awk -v user="${user}" -v key="${key}" '
+        BEGIN { FS = "|" }
+        {
+          if ( $1 != user ) print $0;
+          else if ( $2 != key ) print $0;
+        }' "${LOGIN_DB}" > "${t}"
+
       # move new file to DB location
       cp --no-preserve=mode,ownership "${t}" "${LOGIN_DB}"
       rm "${t}"
