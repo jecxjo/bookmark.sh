@@ -3,11 +3,16 @@ TODO
 
 Pending:
 0009 Add search option for tags
+0029 URL should have a valid host name
+
+Complete:
+0032 Add README to project
+0033 Option to disable user accounts completely
 0018 Test for SSL when login
 0025 Reduce validations to entry cases in main loop
 0026 Cleanup up code, better documentation
-
-Complete:
+0031 Short URL Expanding failure should have a link to main page
+0030 URL with non-supported protocols should be rejected
 0027 Sort order is broken, print in reverse order found in db
 0028 Shorten broken, can't find next base36 correctly
 0023 Logging in from a different location logs out others
