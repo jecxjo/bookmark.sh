@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.2.1
+VERSION=0.2.2
 
 ##################
 # START bash_cgi #
@@ -189,13 +189,15 @@ function GenerateKey () {
 }
 
 # Pads a string with 0's and make it 10 characters long
+# This allows for 3.65 x 10^15 possible shortid
+# 1->string
 function Pad () {
   local str="$1";
   local pad="0000000000";
   printf "%*.*s%s\n" 0 $((${#pad} - ${#str})) "${pad}" "${str}";
 }
 
-# Increment a 62-bit Alphanumeric "number"
+# Increment a base36 Alphanumeric "number"
 # 1->number
 function Increment () {
   local S="0123456789abcdefghijklmnopqrstuvwxyz"
@@ -210,6 +212,10 @@ function Increment () {
   esac
 }
 
+###########
+# Cookies #
+###########
+# Prints the cookie "token" (user:key)
 function CookieToken () {
   echo "${HTTP_COOKIE}" | awk '
     BEGIN { RS = ";"; FS = "="; }
@@ -226,26 +232,33 @@ function CookieToken () {
     }'
 }
 
+# returns the user part of the token
+# 1->token
 function TokenUser () {
   echo "$1" | awk 'BEGIN { FS = ":" } { print $1 }'
 }
 
+# returns the key part of the token
+# 1->token
 function TokenKey () {
   echo "$1" | awk 'BEGIN { FS = ":" } { print $2 }'
 }
 
+#################
+# Extended Path #
+#################
+# returns the extended path (the path
+# beyond the file name)
 function ExtPath () {
   builtin echo "${REQUEST_URI}" | sed "s|${SCRIPT_NAME}||" | sed "s|\?.*$||"
 }
 
+# Returns the short id that expands to a long url
 function PathShortId () {
-  echo "$1" | grep -e "^/[a-zA-Z0-9-]\+$" -e "^/[a-zA-Z0-9-]\+/[a-zA-Z0-9-]\+$" | sed "s|.*/\([a-zA-Z0-9-]\+\)$|\1|"
+  echo "$1" | grep -e "^/[a-zA-Z0-9]\+$" | sed "s|.*/\([a-zA-Z0-9-]\+\)$|\1|"
 }
 
-function PathShortUserId () {
-  echo "$1" | grep "^/[a-zA-Z0-9-]\+/[a-zA-Z0-9-]\+$" | sed "s|^/\([a-zA-Z0-9-]\+\)/.*$|\1|"
-}
-
+# Returns the userid from a path (/u/<userid>)
 function PathUserId () {
   echo "$1" | grep "^/u/[a-zA-Z0-9-]\+$" | sed "s|^/u/\([a-zA-Z0-9-]\+\)$|\1|"
 }
@@ -357,11 +370,9 @@ function StripBadStuff () {
   builtin echo "$1" | tr -d '|'
 }
 
-
-
-###########
-# Shorten #
-###########
+###########################
+# Link Database Modifiers #
+###########################
 # LINK_DB - shortid|longurl|date|user|comments|tags
 # Shorten URL and return id
 # 1->longurl, 2->user, 3->comments, 4->tags
@@ -406,6 +417,8 @@ function Shorten () {
   echo "${shortid}"
 }
 
+# Update a short id with new values
+# 1->shortid, 2->longurl, 3->user, 4->comments, 5->tags
 function Update () {
   local shortid="$1" longurl="$(FixURL "$(StripBadStuff "$2")")" user="$(StripBadStuff "$3")" comments="$(StripBadStuff "$4")" tags="$(StripBadStuff "$5")"
 
@@ -432,14 +445,10 @@ function Update () {
   fi
 }
 
-##########
-# Delete #
-##########
-# LINK_DB - shortid|longurl|date|user|comments|tags
-# Delete ID
+# Delete short id entry
 # 1->shortid, 2->user
 function Delete () {
-  local shortid="$1" user="$(IsSaneUser "$2")"
+  local shortid="$1" user="$2"
 
   if [[ -z "${user}" ]]; then
     echo "ERROR"
@@ -478,10 +487,11 @@ function Delete () {
   echo "DONE"
 }
 
-###########
-# ShortTo #
-###########
-
+############
+# ShortTo* #
+############
+# Get URL from Short ID
+# 1->shortid
 function ShortToURL () {
   awk -v short="$1" '
     BEGIN { FS = "|" }
@@ -494,6 +504,8 @@ function ShortToURL () {
     }' "${LINK_DB}"
 }
 
+# Get Name from Short ID
+# 1->shortid
 function ShortToName () {
   awk -v short="$1" '
     BEGIN { FS = "|" }
@@ -506,6 +518,8 @@ function ShortToName () {
     }' "${LINK_DB}"
 }
 
+# Get tags from Short ID
+# 1->shortid
 function ShortToTag () {
   awk -v short="$1" '
     BEGIN { FS = "|" }
@@ -518,9 +532,75 @@ function ShortToTag () {
     }' "${LINK_DB}"
 }
 
-#########
-# Pages #
-#########
+###################
+# HTML Generators #
+###################
+# Generate HTTP Header
+# 1->cookies (optional)
+function Http () {
+  local cookies="$1"
+
+  echo "Content-type: text/html"
+
+  if [[ ! -z "${cookies}" ]]; then
+    echo "Set-Cookie: ${cookies}"
+  fi
+}
+
+# Generate HTML Header
+function Header() {
+  cat << EOF
+<head>
+  <title>${TITLE}</title>
+  <style>
+    fieldset {
+      width: 500px;
+    }
+    legend {
+      font-size: 20px;
+    }
+    label.field {
+      text-align: right;
+      width: 200px;
+      float: left;
+      font-weight: bold;
+    }
+    label.textbox-300 {
+      width: 300px;
+      float: left;
+    }
+    fieldset p {
+      clear: both;
+      padding: 5px;
+    }
+    input.textbox-600 {
+      width: 600px;
+    }
+    input.textbox-300 {
+      width: 300px;
+    }
+  </style>
+</head>
+EOF
+}
+
+# Generate Title section of HTML
+# 1->sub title (optional)
+function Title () {
+  local sub="$1"
+
+  if [[ ! -z "${sub}" ]]; then
+    sub=" - ${sub}"
+  fi
+
+  cat << EOF
+  <h1>${TITLE}${sub}</h1>
+  <small>Version: ${VERSION}</small><br />
+EOF
+}
+
+# Generate html for shortening on
+# anonymous page.
 function GenerateMainShortenForm () {
 
   cat << EOF
@@ -533,6 +613,92 @@ function GenerateMainShortenForm () {
 EOF
 }
 
+# Generate login link used on main page. Includes
+# bookmarklet for anonymous link generation
+function GenerateLoginLink () {
+  cat << EOF
+<br />
+<center>
+<p>[ <a href="${URL}?cmd=login">Login</a> |
+     <a href="javascript:location.href='${URL}/?cmd=shorten&longurl='+encodeURIComponent(location.href)">${TITLE} - shorten</a> ]</p>
+</center>
+<br />
+EOF
+}
+
+# Link for User based bookmarklet
+# 1-> user
+function UserBookmarklet () {
+  local user="$1"
+
+  if [[ ! -z "${user}" ]]; then
+    cat << EOF
+    <a href="javascript:(function()%7Bvar%20s%3Ddocument.title%3Bvar%20l%3Dlocation.href%3Bvar%20w%3Dwindow.open(''%2C'${TITLE}'%2C'height%3D200%2Cwidth%3D450')%3Bvar%20d%3Dw.document%3Bd.write('%3Cform%20action%3D%22${URL}%2Fu%2F${user}%22%20method%3D%22POST%22%3E')%3Bd.write('%3Cinput%20type%3D%22hidden%22%20name%3D%22cmd%22%20value%3D%22useraddlink%22%20%2F%3E')%3Bd.write('URL%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22longurl%22%20size%3D%22400%22%20value%3D'%2Bl%2B'%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('NAME%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22name%22%20size%3D%22400%22%20value%3D%22'%2Bs%2B'%22%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('TAG%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22tag%22%20size%3D%22400%22%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('%3Cinput%20type%3D%22submit%22%20id%3D%22submit%22%20value%3D%22Submit%22%3E%3C%2Fform%3E')%3Bd.close()%7D)()">${TITLE} - ${user}</a>
+EOF
+  fi
+}
+
+# Generate table of user links
+# Table format: update link, delete link, url, name
+# 1->user
+function UserLinks () {
+  local user="$1"
+
+  awk -v user="${user}" -v url="${URL}" '
+    BEGIN { FS = "|" }
+    {
+      if ( $4 == user )
+      {
+        print "<tr>";
+        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=updatelink&shortid=" $1 "\">+</a>]</td>";
+        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=deletelink&shortid=" $1 "\">-</a>]</td>";
+        print " <td bgcolor=CCCCCC>" url "/" $1 "</td>";
+        print " <td bgcolor=CCCCCC>" $5 "</td>";
+        print "</tr>";
+      }
+    }' < <(sed '1!G;h;$!d' "${LINK_DB}")
+}
+
+# Expand id to long url
+# 1->shortid
+function ExpandShort () {
+  local jsdelay=$(( ${DELAY} * 1000 ))
+  local shortid="$(PathShortId "$1")"
+  local longurl="$(awk -v shortid="${shortid}" '
+    BEGIN { FS = "|" }
+    {
+      if ( $1 == shortid ) {
+        print $2;
+        exit 0;
+      }
+    }' "${LINK_DB}")"
+
+  if [[ -z "${longurl}" ]]; then
+    cat << EOF
+<center>
+  <b>Error 07:</b> Short URL not valid<br />
+  <br />
+  <p>[ <a href="${URL}">Back</a> ]</p>
+</center><br />
+EOF
+  else
+    cat << EOF
+<script>
+  setTimeout( function () { window.location.href="${longurl}"; }, ${jsdelay});
+</script>
+<center>
+  Loading your url...<br />
+  <br />
+  If not automatically redirected follow <a href="${longurl}">this link</a>
+</center><br />
+EOF
+  fi
+}
+
+#########
+# Pages #
+#########
+# Generate Main Page
 function MainPage () {
   cat << EOF
 $(Http)
@@ -550,6 +716,8 @@ $(GenerateLoginLink)
 EOF
 }
 
+# Generate shortened page
+# 1->longurl
 function ShortenPage () {
  local longurl="$1"
 
@@ -569,6 +737,8 @@ $(Http)
 EOF
 }
 
+# Generation expansion page
+# 1->path
 function ExpandPage () {
   local extPath="$1"
   cat << EOF
@@ -585,8 +755,10 @@ $(Header)
 EOF
 }
 
+# Generate login page
 function LoginPage () {
-  cat << EOF
+  if [[ "${HTTPS}" == "on" ]]; then
+    cat << EOF
 $(Http)
 
 <!DOCTYPE html>
@@ -600,30 +772,16 @@ $(Http)
   </form>
 </html>
 EOF
-}
-
-function GenerateLoginLink () {
-  cat << EOF
-<br />
-<center>
-<p>[ <a href="${URL}?cmd=login">Login</a> |
-     <a href="javascript:location.href='${URL}/?cmd=shorten&longurl='+encodeURIComponent(location.href)">${TITLE} - shorten</a> ]</p>
-</center>
-<br />
-EOF
-}
-
-# 1-> user
-function UserBookmarklet () {
-  local user="$(IsSaneUser $1)"
-
-  if [[ ! -z "${user}" ]]; then
-    cat << EOF
-    <a href="javascript:(function()%7Bvar%20s%3Ddocument.title%3Bvar%20l%3Dlocation.href%3Bvar%20w%3Dwindow.open(''%2C'${TITLE}'%2C'height%3D200%2Cwidth%3D450')%3Bvar%20d%3Dw.document%3Bd.write('%3Cform%20action%3D%22${URL}%2Fu%2F${user}%22%20method%3D%22POST%22%3E')%3Bd.write('%3Cinput%20type%3D%22hidden%22%20name%3D%22cmd%22%20value%3D%22useraddlink%22%20%2F%3E')%3Bd.write('URL%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22longurl%22%20size%3D%22400%22%20value%3D'%2Bl%2B'%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('NAME%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22name%22%20size%3D%22400%22%20value%3D%22'%2Bs%2B'%22%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('TAG%3A%20%3Cinput%20type%3D%22text%22%20name%3D%22tag%22%20size%3D%22400%22%20style%3D%22width%3A400%3B%22%20%2F%3E%3Cbr%20%2F%3E')%3Bd.write('%3Cinput%20type%3D%22submit%22%20id%3D%22submit%22%20value%3D%22Submit%22%3E%3C%2Fform%3E')%3Bd.close()%7D)()">${TITLE} - ${user}</a>
-EOF
+  else
+    ErrorRedirect "/" "Not connected over HTTPS"
   fi
 }
 
+# Generate User page
+# Assumes cookies have been set by login
+# If the optional shortid is added then the page is
+# used to update a link rather than add one.
+# 1->user, 2->shortid (optional)
 function UserPage () {
   local user="$(IsSaneUser $1)" shortid="$2"
   local token="$(CookieToken)"
@@ -649,6 +807,7 @@ function UserPage () {
     return
   fi
 
+  # If short id is added the link will be updated
   if [[ ! -z "${shortid}" ]]; then
     cmd="userupdatelink"
     url="$(ShortToURL ${shortid})"
@@ -768,24 +927,6 @@ function UserDeleteLinkPage () {
   UserPage "${user}"
 }
 
-function UserLinks () {
-  local user="$(IsSaneUser "$1")"
-
-  awk -v user="${user}" -v url="${URL}" '
-    BEGIN { FS = "|" }
-    {
-      if ( $4 == user )
-      {
-        print "<tr>";
-        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=updatelink&shortid=" $1 "\">+</a>]</td>";
-        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=deletelink&shortid=" $1 "\">-</a>]</td>";
-        print " <td bgcolor=CCCCCC>" url "/" $1 "</td>";
-        print " <td bgcolor=CCCCCC>" $5 "</td>";
-        print "</tr>";
-      }
-    }' < <(sed '1!G;h;$!d' "${LINK_DB}")
-}
-
 # Generate short url and load the main form again
 # 1->longurl
 function GenerateShorten () {
@@ -809,42 +950,9 @@ EOF
   GenerateMainShortenForm
 }
 
-# Expand id to long url
-# 1->shortid
-function ExpandShort () {
-  local jsdelay=$(( ${DELAY} * 1000 ))
-  local shortid="$(PathShortId "$1")"
-  local longurl="$(awk -v shortid="${shortid}" '
-    BEGIN { FS = "|" }
-    {
-      if ( $1 == shortid ) {
-        print $2;
-        exit 0;
-      }
-    }' "${LINK_DB}")"
-
-  if [[ -z "${longurl}" ]]; then
-    cat << EOF
-<center>
-  <b>Error 07:</b> Short URL not valid<br />
-  <br />
-  <p>[ <a href="${URL}">Back</a> ]</p>
-</center><br />
-EOF
-  else
-    cat << EOF
-<script>
-  setTimeout( function () { window.location.href="${longurl}"; }, ${jsdelay});
-</script>
-<center>
-  Loading your url...<br />
-  <br />
-  If not automatically redirected following <a href="${longurl}">this link</a>
-</center><br />
-EOF
-  fi
-}
-
+# Generate error page for anonymous links
+# Optional message available and cookie management
+# 1->error message, 2->cookie (optional)
 function GenerateErrorMain () {
   cat << EOF
 $(Http "$2")
@@ -863,6 +971,7 @@ $(Header)
 EOF
 }
 
+# Generate error redirect page
 # 1-> path, 2->message
 function ErrorRedirect () {
   local path="$1" msg="$2"
@@ -884,6 +993,8 @@ $(Header)
 EOF
 }
 
+# Attempt to log in and generate page
+# 1->user, 2->password
 function TryLogin () {
   local user="$(IsSaneUser "$1")" pass="$2"
 
@@ -917,6 +1028,7 @@ $(Header)
 EOF
 }
 
+# Logout of user, based on cookie
 function LogoutPage () {
   local token="$(CookieToken)"
   local user=$(TokenUser "${token}")
@@ -948,9 +1060,9 @@ EOF
 
 }
 
-###############
-# Login Stuff #
-###############
+#################
+# User Accounts #
+#################
 # Login as user, returns key if success and empty string
 # if failure
 # 1->user, 2->pass
@@ -1066,69 +1178,6 @@ function CleanupLogin () {
     echo "BUSY"
   fi
 }
-
-###################
-# HTML Generation #
-###################
-function Http () {
-  local cookies="$1"
-
-  echo "Content-type: text/html"
-
-  if [[ ! -z "${cookies}" ]]; then
-    echo "Set-Cookie: ${cookies}"
-  fi
-}
-
-function Header() {
-  cat << EOF
-<head>
-  <title>${TITLE}</title>
-  <style>
-    fieldset {
-      width: 500px;
-    }
-    legend {
-      font-size: 20px;
-    }
-    label.field {
-      text-align: right;
-      width: 200px;
-      float: left;
-      font-weight: bold;
-    }
-    label.textbox-300 {
-      width: 300px;
-      float: left;
-    }
-    fieldset p {
-      clear: both;
-      padding: 5px;
-    }
-    input.textbox-600 {
-      width: 600px;
-    }
-    input.textbox-300 {
-      width: 300px;
-    }
-  </style>
-</head>
-EOF
-}
-
-function Title () {
-  local sub="$1"
-
-  if [[ ! -z "${sub}" ]]; then
-    sub=" - ${sub}"
-  fi
-
-  cat << EOF
-  <h1>${TITLE}${sub}</h1>
-  <small>Version: ${VERSION}</small><br />
-EOF
-}
-
 
 ########
 # Main #
