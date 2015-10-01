@@ -4,9 +4,10 @@ TODO
 Pending:
 0009 Add search option for tags
 0029 URL should have a valid host name
-0032 Add README to project
 
 Complete:
+0032 Add README to project
+0033 Option to disable user accounts completely
 0018 Test for SSL when login
 0025 Reduce validations to entry cases in main loop
 0026 Cleanup up code, better documentation

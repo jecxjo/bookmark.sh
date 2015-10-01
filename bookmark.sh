@@ -59,14 +59,20 @@ TITLE="Bookmark.sh"
 # point to this path
 URL="https://example.com/cgi-bin/bookmark.sh"
 
-# List of users that are not allowed to use this service
-BLACKLIST=(root http nobody)
-
 # Login expiration (in seconds)
 EXPIRATION=3600 # 1 hour
 
 # Expand delay (in seconds)
 DELAY=3
+
+# Enable User accounts
+# This allows the script to run as a bookmark app as well
+# as a URL shortener. If you just want a shortener set to
+# false.
+ENABLE_USERS=true
+
+# List of users that are not allowed to log into this service
+BLACKLIST=(root http nobody)
 
 ###############
 # Global Vars #
@@ -616,7 +622,8 @@ EOF
 # Generate login link used on main page. Includes
 # bookmarklet for anonymous link generation
 function GenerateLoginLink () {
-  cat << EOF
+  if [[ "${ENABLE_USERS}" == true ]]; then
+    cat << EOF
 <br />
 <center>
 <p>[ <a href="${URL}?cmd=login">Login</a> |
@@ -624,6 +631,15 @@ function GenerateLoginLink () {
 </center>
 <br />
 EOF
+  else
+    cat << EOF
+<br />
+<center>
+<p>[ <a href="javascript:location.href='${URL}/?cmd=shorten&longurl='+encodeURIComponent(location.href)">${TITLE} - shorten</a> ]</p>
+</center>
+<br />
+EOF
+  fi
 }
 
 # Link for User based bookmarklet
@@ -1197,12 +1213,20 @@ case "${extPath}" in
         ShortenPage "${longurl}"
         ;;
       "login")
-        LoginPage
+        if [[ "${ENABLE_USERS}" == true ]]; then
+          LoginPage
+        else
+          ErrorRedirect "/" "User accounts not enabled"
+        fi
         ;;
       "trylogin")
-        cgi_getvars POST user
-        cgi_getvars POST password
-        TryLogin "${user}" "${password}"
+        if [[ "${ENABLE_USERS}" == true ]]; then
+          cgi_getvars POST user
+          cgi_getvars POST password
+          TryLogin "${user}" "${password}"
+        else
+          ErrorRedirect "/" "User accounts not enabled"
+        fi
         ;;
       *)
         MainPage
@@ -1210,36 +1234,40 @@ case "${extPath}" in
     esac
     ;;
   "/u/${userId}")
-    cgi_getvars BOTH cmd
-    case "${cmd}" in
-      "logout")
-        LogoutPage
-        ;;
-      "useraddlink")
-        cgi_getvars POST longurl
-        cgi_getvars POST name
-        cgi_getvars POST tag
-        UserAddLinkPage "${userId}" "${longurl}" "${name}" "${tag}"
-        ;;
-      "userupdatelink")
-        cgi_getvars POST longurl
-        cgi_getvars POST name
-        cgi_getvars POST tag
-        cgi_getvars POST shortid
-        UserUpdateLinkPage "${userId}" "${shortid}" "${longurl}" "${name}" "${tag}"
-        ;;
-      "updatelink")
-        cgi_getvars BOTH shortid
-        UserPage "${userId}" "${shortid}"
-        ;;
-      "deletelink")
-        cgi_getvars BOTH shortid
-        UserDeleteLinkPage "${userId}" "${shortid}"
-        ;;
-      *)
-        UserPage "${userId}"
-        ;;
-    esac
+    if [[ "${ENABLE_USERS}" == true ]]; then
+      cgi_getvars BOTH cmd
+      case "${cmd}" in
+        "logout")
+          LogoutPage
+          ;;
+        "useraddlink")
+          cgi_getvars POST longurl
+          cgi_getvars POST name
+          cgi_getvars POST tag
+          UserAddLinkPage "${userId}" "${longurl}" "${name}" "${tag}"
+          ;;
+        "userupdatelink")
+          cgi_getvars POST longurl
+          cgi_getvars POST name
+          cgi_getvars POST tag
+          cgi_getvars POST shortid
+          UserUpdateLinkPage "${userId}" "${shortid}" "${longurl}" "${name}" "${tag}"
+          ;;
+        "updatelink")
+          cgi_getvars BOTH shortid
+          UserPage "${userId}" "${shortid}"
+          ;;
+        "deletelink")
+          cgi_getvars BOTH shortid
+          UserDeleteLinkPage "${userId}" "${shortid}"
+          ;;
+        *)
+          UserPage "${userId}"
+          ;;
+      esac
+    else
+      ErrorRedirect "/" "User accounts not enabled"
+    fi
     ;;
   *)
     ExpandPage "${extPath}"
