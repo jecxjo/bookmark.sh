@@ -80,7 +80,7 @@ LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.2
+VERSION=0.2.1
 
 ##################
 # START bash_cgi #
@@ -325,9 +325,28 @@ function FixURL () {
   local url=$(echo "$1" | sed 's|^\(.*\)://\([a-zA-Z0-9.-]\+\)\(/.*\)|\L\1://\2\E\3|' | sed 's|^\([a-zA-Z0-9.-]\+\)\(/*\)|\L\1\E\2|')
 
   # if exit 0 no match was found, assume http
-  if out=$(echo "${url}" | awk '/http:\/\// || /https:\/\// || /ftp:\/\// { exit 1; }'); then
-    echo "http://${url}"
+  if out=$(echo "${url}" | awk '/http:\/\// ||
+                                /https:\/\// ||
+                                /ftp:\/\// ||
+                                /sftp:\/\// ||
+                                /gopher:\/\// ||
+                                /irc:\/\// ||
+                                /mms:\/\// ||
+                                /news:\/\// ||
+                                /telnet:\/\// ||
+                                /ssh:\/\// ||
+                                /xmpp:\/\// { exit 1; }'); then
+
+    # Check if other protocol exists
+    if out=$(echo "${url}" | awk '/^[a-z0-9]+:\/\// { exit 1; }'); then
+      # No protocol, assuming http
+      echo "http://${url}"
+    else
+      # Not a trusted protocol
+      echo ""
+    fi
   else
+    # Has valid protocol
     echo "${url}"
   fi
 }
@@ -348,6 +367,11 @@ function StripBadStuff () {
 # 1->longurl, 2->user, 3->comments, 4->tags
 function Shorten () {
   local longurl="$(FixURL "$(StripBadStuff "$1")")" user="$(StripBadStuff "$2")" comments="$(StripBadStuff "$3")" tags="$(StripBadStuff "$4")"
+
+  if [[ -z "${longurl}" ]]; then
+    return # Fixing url returns an empty string, it was bad
+  fi
+
   local shortid=$(awk -v longurl="${longurl}" -v user="${user}" '
     BEGIN { FS = "|" }
     {
@@ -803,6 +827,8 @@ function ExpandShort () {
     cat << EOF
 <center>
   <b>Error 07:</b> Short URL not valid<br />
+  <br />
+  <p>[ <a href="${URL}">Back</a> ]</p>
 </center><br />
 EOF
   else
