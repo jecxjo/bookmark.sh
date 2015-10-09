@@ -213,7 +213,7 @@ function Increment () {
   B=${N#$F}
 
   case "$B" in
-    (z) [ -z "$F" ] && echo 10 || echo "$(inc "$F")0" ;;
+    (z) [ -z "$F" ] && echo 10 || echo "$(Increment "$F")0" ;;
     (*) echo "$F${S:1+36#$B:1}"
   esac
 }
