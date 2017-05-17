@@ -29,6 +29,14 @@ and change it's permissions to executable.
     # chown http:http /srv/http/cgi-bin/bookmark.sh
     # chmod 700 /srv/http/cgi-bin/bookmark.sh
 
+Once the options are configured (see section below) you can add users via the
+command line. Once user is created they can change the password once logged in.
+
+    # /srv/http/cgi-bin/bookmark.sh adduser foo bar
+
+If the password is lost, just run the same command to replace with a new
+password.
+
 ## Options
 
     # Path to store database info

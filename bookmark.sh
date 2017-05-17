@@ -32,14 +32,22 @@
 # 
 #   DESCRIPTION: A cgi script for managing bookmarks.
 # 
-#       OPTIONS: ---
+#       OPTIONS: help    - Prints Help
+#                adduser - Adds user to db
 #  REQUIREMENTS: ---
 #          BUGS: ---
-#         NOTES: ---
-#        AUTHOR: Jeff Parent (jeff@commentedcode.org
+#        AUTHOR: Jeff Parent (jeff@commentedcode.org)
 #  ORGANIZATION: 
 #       CREATED: 09/25/2015 11:39
-#      REVISION: 0.4
+#      REVISION: 0.4.1 - 2017-05-17 17:09
+#
+#         NOTES: 0.4.1
+#                  - Modified user managment to a flat file instead of system
+#                    accounts.
+#                  - Added command line support to add users
+#                  - Added password changing support to user page
+#                  - Links in user page are actual a href
+#
 #
 # ACKNOWLEDGEMENTS:
 # bash_cgi
@@ -57,7 +65,7 @@ TITLE="Bookmark.sh"
 
 # Faull URL path. This is used in the HTML generation, all forms will
 # point to this path
-URL="https://example.com/cgi-bin/bookmark.sh"
+URL="https://example.com/bookmark.sh"
 
 # Login expiration (in seconds)
 EXPIRATION=3600 # 1 hour
@@ -85,8 +93,12 @@ touch "${LOGIN_DB}"
 LINK_DB="${DB_DIR}/links.db"
 touch "${LINK_DB}"
 
+# USERS_DB - user|hashedpwd
+USER_DB="${DB_DIR}/user.db"
+touch "${USER_DB}"
+
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.4
+VERSION=0.4.1
 
 ##################
 # START bash_cgi #
@@ -310,10 +322,29 @@ function UnlockLinkMutex () {
   rm -rf /tmp/bookmark.sh.link.lock
 }
 
+# Locks the USER_DB file
+function LockUserMutex () {
+  local count=5
+  while [[ ${count} > 0 ]]
+  do
+    if mkdir /tmp/bookmark.sh.user.lock; then
+      echo "LOCKED"
+      return
+    fi
+    count=$(( count - 1 ))
+    sleep 1
+  done
+}
+
+# Unlock the USER_DB file
+function UnlockUserMutex () {
+  rm -rf /tmp/bookmark.sh.user.lock
+}
+
 ################
 # Sanitization #
 ################
-# Checks if username is a sane username
+# Checks if username is a sane username and exists in db
 # 1->user
 function IsSaneUser () {
   # Make sure user is only alpha-numeric and optionally contain a dash
@@ -331,11 +362,30 @@ function IsSaneUser () {
   fi
 
   # Check if user is actually on system
-  grep -q "^${user}:" /etc/passwd
+  grep -q "^${user}|" "${USER_DB}"
 
   if [[ $? -eq 0 ]]; then
     echo "${user}" # Print user name since its valid
   fi
+}
+
+# Checks if username is a sane username
+function IsSaneUserString () {
+  # Make sure user is only alpha-numeric and optionally contain a dash
+  local user=$(echo "$1" | grep "^[0-9A-Za-z-]\+$")
+  if [ ! -z "${user}" ]; then
+    # run through blacklist to make sure user is ok on system
+    local count=0
+    while [ "x${BLACKLIST[count]}" != "x" ]
+    do
+      if [ "${user}" == "${BLACKLIST[count]}" ]; then
+        return # In blacklist, exit
+      fi
+      count=$(( ${count} + 1 ))
+    done
+  fi
+
+  echo "${user}" # Print user name since its valid
 }
 
 # Checks url for protocol and inserts if not there
@@ -585,6 +635,9 @@ function Header() {
     input.textbox-300 {
       width: 300px;
     }
+    input.textbox-100 {
+      width: 100px;
+    }
   </style>
 </head>
 EOF
@@ -667,8 +720,8 @@ function UserLinks () {
       {
         print "<tr>";
         print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=updatelink&shortid=" $1 "\">+</a>]</td>";
-        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=deletelink&shortid=" $1 "\">-</a>]</td>";
-        print " <td bgcolor=CCCCCC>" url "/" $1 "</td>";
+        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=deletelink&shortid=" $1 "\">X</a>]</td>";
+        print " <td bgcolor=CCCCCC><a href=\"" url "/" $1 "\">" url "/" $1 "</a></td>";
         print " <td bgcolor=CCCCCC>" $5 "</td>";
         print "</tr>";
       }
@@ -854,9 +907,18 @@ $(Header)
   </center>
   <br />
   <!-- Tags -->
+  <!-- Links -->
   <table>
     $(UserLinks "${cookieUser}")
   </table>
+  <hr />
+  <!-- Change Password -->
+  <center>
+    <form action="${URL}/u/${user}" method="POST">
+      <input type="hidden" name="cmd" value="changepass" />
+      <p>New Password: <input type="password" name="newpassword" class="textbox-100" /> <input type="password" name="verifypassword" class="textbox-100" /> <input type="submit" value="Update" /></p>
+      </form>
+  </center>
 </body>
 </html>
 EOF
@@ -943,6 +1005,44 @@ function UserDeleteLinkPage () {
   UserPage "${user}"
 }
 
+# user newpass verifypass
+function UserChangePasswordPage () {
+  local user="$(IsSaneUser "$1")" newpass="$2" verifypass="$3"
+
+  local token="$(CookieToken)"
+  local cookieUser=$(TokenUser "${token}")
+  local cookieKey=$(TokenKey "${token}")
+
+  if [[ -z "${user}" ]]; then
+    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ "${user}" != "${cookieUser}" ]]; then
+    GenerateErrorMain "User Cookie Issue" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
+    GenerateErrorMain "Cookie Error" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ "${newpass}" != "${verifypass}" ]]; then
+    GenerateUserNotice "ERROR: New passwords do not match" "${user}"
+    return
+  fi
+  
+  local out=$(ChangePassword "${user}" "${cookieKey}" "${newpass}")
+  
+  if [[ "${out}" != "CHANGED" ]]; then
+    GenerateUserNotice "ERROR: Failed to update password" "${user}"
+    return
+  fi
+  
+  GenerateUserNotice "SUCCESS: Updated Password" "${user}"
+}
+
 # Generate short url and load the main form again
 # 1->longurl
 function GenerateShorten () {
@@ -981,6 +1081,26 @@ $(Header)
   $1<br />
   <br />
   <p>[ <a href="${URL}">Back</a> ]</p>
+  <br />
+</body>
+</html>
+EOF
+}
+
+# Generate a notice for user
+# 1->msg 2->user
+function GenerateUserNotice () {
+  cat << EOF
+$(Http)
+
+<!DOCTYPE html>
+<html>
+$(Header)
+<body>
+  $(Title "Notice")
+  $1<br />
+  <br />
+  <p>[ <a href="${URL}/u/$2">OK</a> ]</p>
   <br />
 </body>
 </html>
@@ -1084,9 +1204,11 @@ EOF
 # 1->user, 2->pass
 function LoginUser () {
   local user="$(IsSaneUser "$1")" pass="$2"
+  local passhash=$(builtin echo "${user}|${pass}" | sha256sum | cut -d ' ' -f 1)
 
   # Check if user and password work
-  if out=$(builtin echo -e "${pass}\n" | su -c "true" - "${user}" 2>&1 1>/dev/null); then
+  grep -q "^${user}|${passhash}" "${USER_DB}"
+  if [[ $? -eq 0 ]]; then
     local key=$(GenerateKey)
 
     if [[ "$(LockLoginMutex)" == "LOCKED" ]]; then
@@ -1173,6 +1295,44 @@ function LogoutUser () {
   fi
 }
 
+# Change Password
+# 1->user, 2->key, 3->newpass
+function ChangePassword () {
+  local user="$(IsSaneUser "$1")" key="$2" newpass="$3"
+  
+  if [[ ! -z "$(ValidateUserKey "${user}" "${key}")" ]]; then
+    if [[ "$(LockUserMutex)" == "LOCKED" ]]; then
+      local t=$(mktemp /tmp/user.XXXXXX)
+  
+      # Remove previous user
+      awk -v user="${user}" '
+        BEGIN { FS = "|" }
+        {
+          if ( $1 != user ) print $0;
+        }' "${USER_DB}" > "${t}"
+  
+      # Insert new password
+      local passhash=$(builtin echo "${user}|${newpass}" | sha256sum | cut -d ' ' -f 1)
+  
+      echo "${user}|${passhash}" >> "${t}"
+  
+      # move new file to new file to DB location
+      cp --no-preserve=mode,ownership "${t}" "${USER_DB}"
+      # rm "${t}"
+  
+      # Unlock mutex
+      UnlockUserMutex
+  
+      # Return value
+      echo "CHANGED"
+    else
+      echo "BUSY"
+    fi
+  else
+    echo "INVALID"
+  fi
+}
+
 # Clean out all old logins
 function CleanupLogin () {
   if [[ "$(LockLoginMutex)" == "LOCKED" ]]; then
@@ -1195,9 +1355,76 @@ function CleanupLogin () {
   fi
 }
 
+################
+# Command Line #
+################
+function CommandlineHelp () {
+  cat << EOF
+usage: bookmark.sh [Commands]
+
+Commands:
+  help                   prints this output
+  adduser [user] [pass]  Adds a user to db
+
+EOF
+}
+
+function CommandlineAddUser () {
+  local user="$(IsSaneUserString "$1")" pass="$2"
+
+  if [[ -z "${user}" ]]; then
+    echo "ERROR: Bad Username"
+    exit 1
+  fi
+
+  if [[ "$(LockUserMutex)" == "LOCKED" ]]; then
+    local t=$(mktemp /tmp/user.XXXXXX)
+
+    # Remove previous user
+    awk -v user="${user}" '
+      BEGIN { FS = "|" }
+      {
+        if ( $1 != user ) print $0;
+      }' "${USER_DB}" > "${t}"
+
+    # Insert new password
+    local passhash=$(builtin echo "${user}|${pass}" | sha256sum | cut -d ' ' -f 1)
+
+    echo "${user}|${passhash}" >> "${t}"
+
+    # move new file to new file to DB location
+    cp --no-preserve=mode,ownership "${t}" "${USER_DB}"
+    # rm "${t}"
+
+    # Unlock mutex
+    UnlockUserMutex
+
+    echo "User Added/Updated"
+  else
+    echo "ERROR: User DB Busy"
+    exit 1
+  fi
+}
+
 ########
 # Main #
 ########
+
+if [[ $# > 0 ]]; then
+  case "$1" in
+    "help")
+      CommandlineHelp
+      ;;
+    "adduser")
+      CommandlineAddUser "$2" "$3"
+      ;;
+    *)
+      echo "Unknown command: $1"
+      CommandlineHelp
+      ;;
+  esac
+  exit 0
+fi
 
 extPath="$(ExtPath)"
 userId="$(PathUserId "${extPath}")"
@@ -1260,6 +1487,11 @@ case "${extPath}" in
         "deletelink")
           cgi_getvars BOTH shortid
           UserDeleteLinkPage "${userId}" "${shortid}"
+          ;;
+        "changepass")
+          cgi_getvars POST newpassword 
+          cgi_getvars POST verifypassword 
+          UserChangePasswordPage "${userId}" "${newpassword}" "${verifypassword}"
           ;;
         *)
           UserPage "${userId}"
