@@ -8,6 +8,7 @@ Pending:
 0039 Commandline add link
 
 Complete:
+0040 Confirm delete page
 0037 Links in user page are actual a href
 0036 Password change support on user page
 0035 Add command line support to add user

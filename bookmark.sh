@@ -720,7 +720,7 @@ function UserLinks () {
       {
         print "<tr>";
         print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=updatelink&shortid=" $1 "\">+</a>]</td>";
-        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=deletelink&shortid=" $1 "\">X</a>]</td>";
+        print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=cfgdeletelink&shortid=" $1 "\">X</a>]</td>";
         print " <td bgcolor=CCCCCC><a href=\"" url "/" $1 "\">" url "/" $1 "</a></td>";
         print " <td bgcolor=CCCCCC>" $5 "</td>";
         print "</tr>";
@@ -887,8 +887,8 @@ function UserPage () {
   cat << EOF
 $(Http)
 
-<!DOCTYPE html>
 <html>
+<!DOCTYPE html>
 $(Header)
 <body>
   $(Title)
@@ -978,6 +978,48 @@ function UserUpdateLinkPage () {
 }
 
 # user, shortid
+function UserConfirmDeleteLinkPage () {
+  local user="$(IsSaneUser "$1")" shortid="$2"
+
+  local token="$(CookieToken)"
+  local cookieUser=$(TokenUser "${token}")
+  local cookieKey=$(TokenKey "${token}")
+
+  if [[ -z "${user}" ]]; then
+    GenerateErrorMain "Invalid User" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ "${user}" != "${cookieUser}" ]]; then
+    GenerateErrorMain "User Cookie Issue" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  if [[ -z "$(ValidateUserKey "${cookieUser}" "${cookieKey}")" ]]; then
+    GenerateErrorMain "Cookie Error" "token=; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    return
+  fi
+
+  cat << EOF
+$(Http)
+
+<!DOCTYPE html>
+<html>
+$(Header)
+<body>
+  <center>
+  Confirm Deletion: $(ShortToName ${shortid})
+    <br /><br />
+    <a href="${URL}/u/${user}?cmd=deletelink&shortid=${shortid}">YES</a> /
+    <a href="${URL}/u/${user}">NO</a>
+  </center>
+</body>
+</html>
+EOF
+}
+
+
+# user, shortid
 function UserDeleteLinkPage () {
   local user="$(IsSaneUser "$1")" shortid="$2"
 
@@ -1032,9 +1074,9 @@ function UserChangePasswordPage () {
     GenerateUserNotice "ERROR: New passwords do not match" "${user}"
     return
   fi
-  
+
   local out=$(ChangePassword "${user}" "${cookieKey}" "${newpass}")
-  
+
   if [[ "${out}" != "CHANGED" ]]; then
     GenerateUserNotice "ERROR: Failed to update password" "${user}"
     return
@@ -1483,6 +1525,10 @@ case "${extPath}" in
         "updatelink")
           cgi_getvars BOTH shortid
           UserPage "${userId}" "${shortid}"
+          ;;
+        "cfgdeletelink")
+          cgi_getvars BOTH shortid
+          UserConfirmDeleteLinkPage "${userId}" "${shortid}"
           ;;
         "deletelink")
           cgi_getvars BOTH shortid
