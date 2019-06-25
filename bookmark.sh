@@ -1,4 +1,4 @@
-#!/bin/bash - 
+#!/bin/bash -
 #===============================================================================
 # Copyright (c) 2015 Jeff Parent
 # All rights reserved.
@@ -27,21 +27,24 @@
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 #          FILE: bookmark.sh
-# 
-#         USAGE: ./bookmark.sh 
-# 
+#
+#         USAGE: ./bookmark.sh
+#
 #   DESCRIPTION: A cgi script for managing bookmarks.
-# 
+#
 #       OPTIONS: help    - Prints Help
 #                adduser - Adds user to db
 #  REQUIREMENTS: ---
 #          BUGS: ---
 #        AUTHOR: Jeff Parent (jeff@commentedcode.org)
-#  ORGANIZATION: 
+#  ORGANIZATION:
 #       CREATED: 09/25/2015 11:39
-#      REVISION: 0.4.1 - 2017-05-17 17:09
+#      REVISION: 0.4.2 - 2019/06/25 10:10:12
 #
-#         NOTES: 0.4.1
+#         NOTES: 0.4.2 - 2019/06/25 10:10:12
+#                  - Open link to target _blank
+#
+#                0.4.1 - 2017-05-17 17:09
 #                  - Modified user managment to a flat file instead of system
 #                    accounts.
 #                  - Added command line support to add users
@@ -98,7 +101,7 @@ USER_DB="${DB_DIR}/user.db"
 touch "${USER_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.4.1
+VERSION=0.4.2
 
 ##################
 # START bash_cgi #
@@ -721,7 +724,7 @@ function UserLinks () {
         print "<tr>";
         print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=updatelink&shortid=" $1 "\">+</a>]</td>";
         print " <td bgcolor=CCCCCC>[<a href=\"" url "/u/" user "?cmd=cfgdeletelink&shortid=" $1 "\">X</a>]</td>";
-        print " <td bgcolor=CCCCCC><a href=\"" url "/" $1 "\">" url "/" $1 "</a></td>";
+        print " <td bgcolor=CCCCCC><a target=\"_blank\" href=\"" url "/" $1 "\">" url "/" $1 "</a></td>";
         print " <td bgcolor=CCCCCC>" $5 "</td>";
         print "</tr>";
       }
@@ -1081,7 +1084,7 @@ function UserChangePasswordPage () {
     GenerateUserNotice "ERROR: Failed to update password" "${user}"
     return
   fi
-  
+
   GenerateUserNotice "SUCCESS: Updated Password" "${user}"
 }
 
@@ -1341,30 +1344,30 @@ function LogoutUser () {
 # 1->user, 2->key, 3->newpass
 function ChangePassword () {
   local user="$(IsSaneUser "$1")" key="$2" newpass="$3"
-  
+
   if [[ ! -z "$(ValidateUserKey "${user}" "${key}")" ]]; then
     if [[ "$(LockUserMutex)" == "LOCKED" ]]; then
       local t=$(mktemp /tmp/user.XXXXXX)
-  
+
       # Remove previous user
       awk -v user="${user}" '
         BEGIN { FS = "|" }
         {
           if ( $1 != user ) print $0;
         }' "${USER_DB}" > "${t}"
-  
+
       # Insert new password
       local passhash=$(builtin echo "${user}|${newpass}" | sha256sum | cut -d ' ' -f 1)
-  
+
       echo "${user}|${passhash}" >> "${t}"
-  
+
       # move new file to new file to DB location
       cp --no-preserve=mode,ownership "${t}" "${USER_DB}"
       # rm "${t}"
-  
+
       # Unlock mutex
       UnlockUserMutex
-  
+
       # Return value
       echo "CHANGED"
     else
@@ -1535,8 +1538,8 @@ case "${extPath}" in
           UserDeleteLinkPage "${userId}" "${shortid}"
           ;;
         "changepass")
-          cgi_getvars POST newpassword 
-          cgi_getvars POST verifypassword 
+          cgi_getvars POST newpassword
+          cgi_getvars POST verifypassword
           UserChangePasswordPage "${userId}" "${newpassword}" "${verifypassword}"
           ;;
         *)
