@@ -39,9 +39,12 @@
 #        AUTHOR: Jeff Parent (jeff@commentedcode.org)
 #  ORGANIZATION:
 #       CREATED: 09/25/2015 11:39
-#      REVISION: 0.4.2 - 2019/06/25 10:10:12
+#      REVISION: 0.4.3 - 2019-07-22 23:07:24
 #
-#         NOTES: 0.4.2 - 2019/06/25 10:10:12
+#         NOTES: 0.4.3 - 2019/06/25 10:10:12
+#                  - Flexbox to make forms look better
+#
+#                0.4.2 - 2019/06/25 10:10:12
 #                  - Open link to target _blank
 #
 #                0.4.1 - 2017-05-17 17:09
@@ -101,7 +104,7 @@ USER_DB="${DB_DIR}/user.db"
 touch "${USER_DB}"
 
 # Version, releases are X.Y, dev are X.Y.Z
-VERSION=0.4.2
+VERSION=0.4.3
 
 ##################
 # START bash_cgi #
@@ -612,25 +615,26 @@ function Header() {
 <head>
   <title>${TITLE}</title>
   <style>
-    fieldset {
-      width: 500px;
+    .col {
+      display: flex;
+      flex-direction: column;
+      flex-wrap: nowrap;
+      justify-content: space-around;
+      align-items: stretch;
     }
-    legend {
-      font-size: 20px;
+    .row {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: nowrap;
+      justify-content: center;
+      align-items: center;
+      padding-bottom: 10px;
     }
     label.field {
       text-align: right;
-      width: 200px;
-      float: left;
+      width: 100px;
       font-weight: bold;
-    }
-    label.textbox-300 {
-      width: 300px;
-      float: left;
-    }
-    fieldset p {
-      clear: both;
-      padding: 5px;
+      padding-right: 10px;
     }
     input.textbox-600 {
       width: 600px;
@@ -835,13 +839,26 @@ $(Http)
 
 <!DOCTYPE html>
 <html>
-  $(Title "Login")
-  <form action="${URL}" method="POST">
-    <input type="hidden" name="cmd" value="trylogin" />
-    <p><label class="field" for="user">User:</label> <input type="text" name="user" class="textbox-300" /></p>
-    <p><label class="field" for="password">Password:</label> <input type="password" name="password" class="textbox-300" /></p>
-    <input type="submit" value="Login" />
-  </form>
+  $(Header)
+  <body>
+    $(Title "Login")
+    <form action="${URL}" method="POST">
+      <input type="hidden" name="cmd" value="trylogin" />
+      <div class="col">
+        <div class="row">
+          <label class="field" for="user">User:</label>
+          <input type="text" name="user" class="textbox-300" />
+        </div>
+        <div class="row">
+          <label class="field" for="password">Password:</label>
+          <input type="password" name="password" class="textbox-300" />
+        </div>
+        <div class="row">
+          <input type="submit" value="Login" />
+        </div>
+      </div>
+    </form>
+  </body>
 </html>
 EOF
   else
@@ -902,10 +919,23 @@ $(Header)
     <form action="${URL}/u/${user}" method="POST">
       <input type="hidden" name="cmd" value="${cmd}" />
       <input type="hidden" name="shortid" value="${shortid}" />
-      <p>URL: <input type="text" name="longurl" class="textbox-600" value="${url}" /></p>
-      <p>NAME: <input type="text" name="name" class="textbox-600" value="${name}" /></p>
-      <p>TAG: <input type="text" name="tag" class="textbox-600" value="${tag}" /></p>
-      <input type="submit" value="Save" />
+      <div class="col">
+        <div class="row">
+          <label class="field">URL:</label>
+          <input type="text" name="longurl" class="textbox-600" value="${url}" />
+        </div>
+        <div class="row">
+          <label class="field">NAME:</label>
+          <input type="text" name="name" class="textbox-600" value="${name}" />
+        </div>
+        <div class="row">
+          <label class="field">TAG:</label>
+          <input type="text" name="tag" class="textbox-600" value="${tag}" />
+        </div>
+        <div class="row">
+          <input type="submit" value="Save" />
+        </div>
+      </div>
     </form>
   </center>
   <br />
