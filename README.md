@@ -1,6 +1,8 @@
 # bookmark.sh
 A cgi script for shortening URLs and managing bookmarks.
 
+**NOTE** MOVING FROM GITHUB!!! The new location for this project is: https://git.sh0.xyz/bookmark-sh.git/
+
 ## Description
 This script generates a very basic basic web page to shorten URLs. Drop the
 file in your `cgi-bin` directory and setup a directory and the script does all
